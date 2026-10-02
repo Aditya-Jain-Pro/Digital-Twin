@@ -1,0 +1,71 @@
+<!doctype html><html><head><meta charset="utf-8"><title>HridAI architecture</title>
+<style>
+@page { size: 16.5in 9.3in; margin: 0; }
+:root{--ink:#0b0b0b;--muted:#52514e;--line:#bdbbb3;--blue:#2a78d6;--blue-bg:#eaf2fc;--org:#eb6834;--org-bg:#fdeee7;--green:#1baf7a;--green-bg:#e6f6ef;--violet:#4a3aa7;--violet-bg:#eeecf8;--surface:#fcfcfb}
+*{box-sizing:border-box} body{margin:0;background:var(--surface);font-family:"Inter","Segoe UI",Helvetica,Arial,sans-serif;color:var(--ink)}
+.page{width:16.5in;height:9.3in;padding:.45in .5in;position:relative}
+h1{margin:0;font-size:30px} .sub{color:var(--muted);font-size:15px;margin:4px 0 18px}
+.grid{display:grid;grid-template-columns:1.05fr .9fr 1.5fr 1.15fr;gap:46px;position:relative}
+.col h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.box{border:2px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:12px;background:#fff;font-size:13.5px;line-height:1.35}
+.box b{display:block;font-size:15px;margin-bottom:3px}
+.box.road{border-style:dashed;background:transparent}
+.src{border-color:var(--org)} .src.road{border-color:var(--org)}
+.ing{border-color:var(--violet)}
+.twin{border-color:var(--blue);background:var(--blue-bg)}
+.out{border-color:var(--green)}
+.engine{border:2.5px solid var(--blue);border-radius:16px;padding:14px;background:#fff}
+.engine .step{display:flex;gap:10px;align-items:flex-start;margin-bottom:9px;font-size:13.5px;line-height:1.35}
+.engine .n{flex:0 0 26px;height:26px;border-radius:50%;background:var(--blue);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:13px}
+.engine .step b{font-size:14.5px}
+.arrow{position:absolute;top:50%;font-size:34px;color:var(--muted)}
+.legend{display:flex;gap:26px;font-size:13px;color:var(--muted);margin-top:4px}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.sw{width:30px;height:16px;border:2px solid var(--muted);border-radius:4px;display:inline-block}
+.sw.d{border-style:dashed}
+.bottom{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:14px}
+.band{border-radius:12px;padding:11px 14px;font-size:13px;line-height:1.4;background:#f1f0ec}
+.band b{font-size:14px}
+code{font-family:"DejaVu Sans Mono",monospace;font-size:12px;background:#f1f0ec;padding:1px 4px;border-radius:4px}
+.eq{font-family:"DejaVu Sans Mono",monospace;font-size:12px;color:var(--muted)}
+.col{position:relative}.col:not(:last-child)::after{content:"➜";position:absolute;right:-38px;top:46%;font-size:28px;color:#52514e}</style></head><body><div class="page">
+<h1>HridAI · system architecture</h1>
+<div class="sub">Heart-failure digital twin for the 30 days after hospital discharge · Team Octas, XLRI Jamshedpur · Happiest Health Digital Twin Challenge 2026</div>
+<div class="legend"><span><i class="sw"></i>Built in this proof-of-concept</span><span><i class="sw d"></i>Production roadmap</span></div>
+<div style="height:14px"></div>
+<div class="grid">
+ <div class="col"><h2>1 · Data streams</h2>
+  <div class="box src"><b>Static: EHR / discharge record</b>Age, sex, ejection fraction, eGFR, NT-proBNP, sodium, diabetes, hypertension, furosemide dose, prior HF admissions, polygenic risk percentile (genetic marker). <i>Synthetic, generated in <code>twin.py</code>.</i></div>
+  <div class="box src"><b>Dynamic: smartwatch (nightly)</b>Night heart rate, HRV (RMSSD), breathing rate, SpO2, sleep efficiency, steps. 10% missing days.</div>
+  <div class="box src"><b>Dynamic: smart scale (daily)</b>Morning weight, with scale/clothing offsets and 25% skipped days.</div>
+  <div class="box src road"><b>Roadmap sources</b>Synthea FHIR bundles, MIMIC-IV, ABHA-linked records via ABDM; Apple Health / Google Fit / Health Connect; 3-tap WhatsApp symptom check.</div>
+ </div>
+ <div class="col"><h2>2 · Ingest</h2>
+  <div class="box ing"><b>Clean &amp; align</b>One row per patient-day; missing values kept as gaps, never imputed.</div>
+  <div class="box ing"><b>EHR → twin priors</b>EF sets heart-rate response to fluid; EHR risk score sets how quickly the twin believes a rising trend.</div>
+  <div class="box ing road"><b>LLM extraction</b>Free-text discharge summary → FHIR (Patient, Condition, Observation, MedicationStatement).</div>
+  <div class="box ing road"><b>Consent &amp; privacy</b>ABDM consent manager; DPDP Act-compliant storage; de-identified analytics.</div>
+ </div>
+ <div class="col"><h2>3 · Patient digital twin (per patient)</h2>
+  <div class="engine">
+   <div class="step"><div class="n">1</div><div><b>Sync</b> · days 0-2 at home learn the person's own baseline for every sensor.</div></div>
+   <div class="step"><div class="n">2</div><div><b>State estimation (Kalman filter)</b> · hidden state = [excess fluid L, trend L/day] with uncertainty. Every sensor is a noisy view of that one state.<div class="eq">x<sub>t+1</sub> = F x<sub>t</sub> + w &nbsp;·&nbsp; z<sub>t</sub> = baseline + H(EHR) x<sub>t</sub> + v</div></div></div>
+   <div class="step"><div class="n">3</div><div><b>5-day forecast</b> · P(fluid ≥ 2 L within 5 days), closed form from the projected mean and variance. Alert at ≥ 60%.</div></div>
+   <div class="step"><div class="n">4</div><div><b>Twin fidelity</b> · each day the twin predicts the next readings and scores how often reality lands inside its own 95% band.</div></div>
+   <div class="step"><div class="n">5</div><div><b>Active sensing</b> · uncertain + rising + scale skipped → ask the family for a weigh-in.</div></div>
+   <div class="step" style="margin-bottom:0"><div class="n">6</div><div><b>What-if simulation</b> · project fluid for 10 days under a clinician-chosen diuretic change.</div></div>
+  </div>
+ </div>
+ <div class="col"><h2>4 · People who act</h2>
+  <div class="box out"><b>Clinician dashboard (Streamlit)</b>Belief band, risk, fidelity, alerts vs the 2 kg rule, EHR panel, day-by-day replay, what-if panel.</div>
+  <div class="box out"><b>Caregiver message</b>Plain language, Hindi + English (templates in PoC).</div>
+  <div class="box out road"><b>Delivery</b>WhatsApp / SMS / IVR in Indian languages; nurse call-list for heart-failure clinics; EHR write-back as FHIR Observation.</div>
+  <div class="box out"><b>Safety</b>Decision support only. The twin never changes treatment; the clinician decides.</div>
+ </div>
+</div>
+<div class="bottom">
+ <div class="band"><b>Evaluation pipeline</b> (<code>make_figures.py</code>) · dev cohort (seed 7) picks the alert threshold; untouched test cohort (seed 11, 500 patients) reports sensitivity 2-14 days ahead, lead time, false alerts per patient-month vs the 2 kg / 3 day guideline rule; ablations by data stream.</div>
+ <div class="band"><b>Synthetic cohort realism</b> · person-specific sensor responses, fast and slow decompensators, salty-meal fluid bumps, scale offsets, missing days, and other-cause readmissions the twin should not claim.</div>
+ <div class="band"><b>Stack</b> · Python, NumPy, pandas, Plotly, Streamlit, Matplotlib, pytest (10 tests incl. no look-ahead leakage). MIT licence. Runs on a laptop in under a minute.</div>
+</div>
+</div></body></html>

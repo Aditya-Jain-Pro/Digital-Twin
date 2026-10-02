@@ -1,0 +1,394 @@
+<title>HridAI Twin Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a clinical ward monitor. Patient list on the left, one virtual patient on the right:
+   status first, then the twin's belief, then the raw signals, then the actions. */
+:root {
+  --bg: #f4f6f8; --panel: #ffffff; --line: #dfe3e8; --ink: #121a24; --ink-2: #4a5563; --ink-3: #7a8592;
+  --brand: #c8323b; --twin: #2a78d6; --twin-soft: rgba(42,120,214,.16); --rule: #eb6834; --truth: #6b7280;
+  --ok: #14845c; --ok-bg: #e3f4ec; --warn: #a96500; --warn-bg: #fdf1dc; --crit: #c42b33; --crit-bg: #fde7e8;
+  --grid: #edf0f3; --sel: #eaf2fc;
+  --f-display: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Atkinson Hyperlegible", "Segoe UI", Helvetica, Arial, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e141b; --panel: #151d27; --line: #263241; --ink: #eef2f6; --ink-2: #b5bfcb; --ink-3: #8592a1;
+  --brand: #ef6a72; --twin: #4d98ee; --twin-soft: rgba(77,152,238,.22); --rule: #f08049; --truth: #9aa4b1;
+  --ok: #4cc493; --ok-bg: #12322a; --warn: #f0b04a; --warn-bg: #3a2c12; --crit: #ff7b82; --crit-bg: #3d1a1d;
+  --grid: #1d2733; --sel: #1b2b40; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0e141b; --panel: #151d27; --line: #263241; --ink: #eef2f6; --ink-2: #b5bfcb; --ink-3: #8592a1;
+  --brand: #ef6a72; --twin: #4d98ee; --twin-soft: rgba(77,152,238,.22); --rule: #f08049; --truth: #9aa4b1;
+  --ok: #4cc493; --ok-bg: #12322a; --warn: #f0b04a; --warn-bg: #3a2c12; --crit: #ff7b82; --crit-bg: #3d1a1d;
+  --grid: #1d2733; --sel: #1b2b40; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.45; }
+.wrap { max-width: 1440px; margin: 0 auto; padding-inline: 20px; padding-block: 16px 40px; }
+header.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-block: 6px 16px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand svg { flex: 0 0 auto; }
+.brand h1 { font-family: var(--f-display); font-size: 26px; margin: 0; letter-spacing: -.01em; }
+.brand .sub { color: var(--ink-2); font-size: 14px; }
+.note { font-size: 12.5px; color: var(--ink-3); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; }
+.grid { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.lbl { font-size: 11.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); font-weight: 700; }
+/* patient list */
+.list { position: sticky; top: env(safe-area-inset-top, 0px); max-height: calc(100vh - 32px); display: flex; flex-direction: column; }
+@media (max-width: 900px) { .list { position: static; max-height: 360px; } }
+.list .head { padding: 14px 14px 10px; display: grid; gap: 10px; border-bottom: 1px solid var(--line); }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: transparent; color: var(--ink-2); border-radius: 99px; padding: 4px 10px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.list ul { list-style: none; margin: 0; padding: 6px; overflow-y: auto; }
+.list li button { width: 100%; text-align: left; font: inherit; color: inherit; background: transparent; border: 0; border-radius: 8px; padding: 9px 10px; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; }
+.list li button:hover { background: var(--grid); }
+.list li button[aria-current="true"] { background: var(--sel); }
+.list .pid { font-family: var(--f-mono); font-weight: 600; font-size: 13.5px; }
+.list .meta { grid-column: 1; color: var(--ink-3); font-size: 12.5px; }
+.chip { font-size: 11.5px; font-weight: 700; border-radius: 99px; padding: 2px 8px; white-space: nowrap; grid-row: span 2; }
+.chip.crit { color: var(--crit); background: var(--crit-bg); } .chip.warn { color: var(--warn); background: var(--warn-bg); } .chip.ok { color: var(--ok); background: var(--ok-bg); }
+:focus-visible { outline: 2px solid var(--twin); outline-offset: 2px; }
+/* main */
+.main { display: grid; gap: 16px; min-width: 0; }
+.pt-head { padding: 16px 18px; display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center; justify-content: space-between; }
+.pt-head h2 { font-family: var(--f-display); margin: 0; font-size: 22px; }
+.pt-head .ehr { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13.5px; color: var(--ink-2); }
+.pt-head .ehr b { color: var(--ink); font-family: var(--f-mono); font-weight: 600; }
+.replay { padding: 14px 18px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; }
+.replay button { font: inherit; font-weight: 700; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 7px 14px; cursor: pointer; min-width: 92px; }
+.replay input { width: 100%; accent-color: var(--twin); }
+.replay output { font-family: var(--f-mono); font-size: 14px; color: var(--ink-2); white-space: nowrap; }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 700px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi { padding: 14px 16px; display: grid; gap: 4px; }
+.kpi .v { font-family: var(--f-display); font-size: 34px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.kpi .s { font-size: 13px; color: var(--ink-2); }
+.banner { border-radius: 10px; padding: 12px 16px; display: flex; gap: 12px; align-items: center; font-weight: 700; }
+.banner.crit { background: var(--crit-bg); color: var(--crit); } .banner.warn { background: var(--warn-bg); color: var(--warn); } .banner.ok { background: var(--ok-bg); color: var(--ok); }
+.banner span { font-weight: 400; color: var(--ink-2); }
+.card { padding: 16px 18px; min-width: 0; }
+.card h3 { margin: 0 0 4px; font-family: var(--f-display); font-size: 17px; }
+.card .cap { color: var(--ink-3); font-size: 13px; margin: 0 0 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--ink-2); margin-bottom: 4px; }
+.legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+svg text { font-family: var(--f-body); }
+.chart { width: 100%; height: auto; display: block; overflow: visible; }
+.minis { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px 16px; }
+.mini .t { font-size: 12.5px; color: var(--ink-2); display: flex; justify-content: space-between; gap: 8px; }
+.mini .t b { font-family: var(--f-mono); color: var(--ink); font-weight: 600; }
+.two { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 1000px) { .two { grid-template-columns: minmax(0, 1fr); } }
+.dose { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.msg { border-left: 3px solid var(--twin); padding: 6px 0 6px 12px; margin: 8px 0; }
+.msg .lang { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 700; }
+.tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--panel); font-size: 12.5px; padding: 7px 10px; border-radius: 8px; z-index: 5; font-variant-numeric: tabular-nums; max-width: 240px; }
+.cohort { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 700px) { .cohort { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.cohort .v { font-family: var(--f-display); font-size: 30px; font-weight: 700; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+footer { color: var(--ink-3); font-size: 12.5px; margin-top: 18px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="var(--brand)"/><path d="M6 21h7l3-7 5 14 4-10 2 3h7" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div><h1>HridAI Twin Monitor</h1><div class="sub">Heart-failure digital twins · first 30 days after discharge</div></div>
+    </div>
+    <div class="note">Synthetic patients · decision support, not a medical device</div>
+  </header>
+
+  <div class="grid">
+    <aside class="panel list" aria-label="Patients">
+      <div class="head">
+        <div class="lbl">Ward list · <span id="count"></span></div>
+        <div class="seg" role="group" aria-label="Filter patients">
+          <button id="f-hf" data-f="hf" aria-pressed="true">HF readmissions</button>
+          <button id="f-all" data-f="all" aria-pressed="false">All</button>
+          <button id="f-ok" data-f="none" aria-pressed="false">No readmission</button>
+        </div>
+      </div>
+      <ul id="plist"></ul>
+    </aside>
+
+    <main class="main">
+      <section class="panel pt-head">
+        <div><div class="lbl">Virtual patient</div><h2 id="pt-title"></h2></div>
+        <div class="ehr" id="ehr"></div>
+      </section>
+
+      <section class="panel replay" aria-label="Replay">
+        <button id="play" type="button">▶ Play</button>
+        <input id="day" type="range" min="0" max="29" value="29" aria-label="Day after discharge">
+        <output id="day-out" for="day"></output>
+      </section>
+
+      <div id="banner" class="banner" role="status"></div>
+
+      <section class="kpis">
+        <div class="panel kpi"><div class="lbl">Hidden fluid (estimate)</div><div class="v" id="k-fluid"></div><div class="s" id="k-trend"></div></div>
+        <div class="panel kpi"><div class="lbl">Risk ≥ 2 L in 5 days</div><div class="v" id="k-risk"></div><div class="s">alert at 60%</div></div>
+        <div class="panel kpi"><div class="lbl">Twin fidelity</div><div class="v" id="k-fid"></div><div class="s">readings inside the twin's 95% band</div></div>
+        <div class="panel kpi"><div class="lbl">First alert</div><div class="v" id="k-alert"></div><div class="s" id="k-rule"></div></div>
+      </section>
+
+      <section class="panel card">
+        <h3>What the twin believes</h3>
+        <p class="cap">Estimated litres of excess body fluid with its uncertainty band. The dashed line is the 2 L warning level.</p>
+        <div class="legend">
+          <span><i style="background:var(--twin)"></i>Twin estimate ± 2 sd</span>
+          <span><i style="background:var(--crit)"></i>Twin alert</span>
+          <span><i style="background:var(--rule)"></i>2 kg weight rule</span>
+          <span><i style="background:var(--ink)"></i>Readmission</span>
+          <label class="toggle"><input type="checkbox" id="truth"> Show hidden truth (synthetic)</label>
+        </div>
+        <svg id="main-chart" class="chart" viewBox="0 0 900 300" role="img" aria-label="Twin estimate of hidden fluid over 30 days"></svg>
+      </section>
+
+      <section class="panel card">
+        <h3>What the sensors saw</h3>
+        <p class="cap">Seven nightly or daily signals from a smartwatch and a bathroom scale. Gaps are skipped weigh-ins or nights without the watch.</p>
+        <div class="minis" id="minis"></div>
+      </section>
+
+      <div class="two">
+        <section class="panel card">
+          <h3>What if the clinician acts today?</h3>
+          <p class="cap">Project the next 10 days with extra fluid removed by a diuretic increase (illustrative). The clinician decides; the twin never changes treatment.</p>
+          <div class="dose seg" role="group" aria-label="Extra fluid removed per day" id="dose"></div>
+          <svg id="whatif" class="chart" viewBox="0 0 520 220" role="img" aria-label="What-if projection"></svg>
+        </section>
+        <section class="panel card">
+          <h3>Message to the family</h3>
+          <p class="cap">Sent to the caregiver in plain language.</p>
+          <div id="msgs"></div>
+          <h3 style="margin-top:16px">Discharge record</h3>
+          <div class="ehr" id="ehr2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 16px;font-size:13.5px;color:var(--ink-2)"></div>
+        </section>
+      </div>
+
+      <section class="panel card">
+        <h3>How the twin performs</h3>
+        <p class="cap" id="cohort-cap"></p>
+        <div class="cohort" id="cohort"></div>
+      </section>
+    </main>
+  </div>
+  <footer>HridAI · Team Octas, XLRI Jamshedpur · Happiest Health Digital Twin Challenge 2026 · All patients are synthetic.</footer>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const P = DATA.params, PTS = DATA.patients;
+const $ = id => document.getElementById(id);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const SENS = [
+  ["weight", "Weight", "kg", v => v.toFixed(1)],
+  ["night_hr", "Night heart rate", "bpm", v => v.toFixed(0)],
+  ["night_hrv", "Night HRV (RMSSD)", "ms", v => v.toFixed(0)],
+  ["night_rr", "Breathing rate", "/min", v => v.toFixed(1)],
+  ["spo2", "Night SpO2", "%", v => v.toFixed(1)],
+  ["sleep_eff", "Sleep efficiency", "%", v => v.toFixed(0)],
+  ["log_steps", "Steps", "/day", v => Math.round(Math.exp(v)).toLocaleString("en-IN")],
+];
+let state = { pid: null, day: 29, filter: "hf", dose: 0.4, truth: false, timer: null };
+
+function status(p, d) {
+  const risk = p.twin.risk[d];
+  if (risk >= P.risk_threshold) return ["crit", "Alert"];
+  if (p.twin.ask[d]) return ["warn", "Weigh-in"];
+  if (risk >= 0.3) return ["warn", "Watch"];
+  return ["ok", "Stable"];
+}
+function lastDay(p) { return p.truth.length - 1; }
+
+function renderList() {
+  const f = state.filter;
+  const pts = PTS.filter(p => f === "all" || (f === "hf" ? p.hosp_cause === "heart_failure" : p.hosp_cause === null));
+  $("count").textContent = pts.length + " patients";
+  const ul = $("plist"); ul.innerHTML = "";
+  pts.forEach(p => {
+    const d = lastDay(p), [cls, txt] = status(p, d);
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.setAttribute("aria-current", p.pid === state.pid ? "true" : "false");
+    const out = p.hosp_cause === "heart_failure" ? `readmitted day ${p.hosp_day}` : p.hosp_cause === "other" ? `other readmission day ${p.hosp_day}` : "30 days at home";
+    b.innerHTML = `<span class="pid">PT-${String(p.pid).padStart(3, "0")}</span><span class="chip ${cls}">${txt}</span><span class="meta">${p.age}${p.sex} · EF ${p.ef}% · ${out}</span>`;
+    b.onclick = () => select(p.pid);
+    li.appendChild(b); ul.appendChild(li);
+  });
+}
+
+function select(pid) {
+  stop();
+  state.pid = pid;
+  const p = cur();
+  state.day = lastDay(p);
+  $("day").max = lastDay(p); $("day").value = state.day;
+  renderList(); render();
+}
+const cur = () => PTS.find(p => p.pid === state.pid);
+
+function render() {
+  const p = cur(), d = state.day, t = p.twin;
+  $("pt-title").textContent = `PT-${String(p.pid).padStart(3, "0")} · ${p.age}-year-old ${p.sex === "M" ? "man" : "woman"}`;
+  $("ehr").innerHTML = [["EF", p.ef + "%"], ["eGFR", p.egfr], ["NT-proBNP", p.ntprobnp.toLocaleString("en-IN")], ["Prior HF adm.", p.prior_admissions], ["EHR risk", Math.round(p.ehr_risk * 100) + "%"]]
+    .map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join("");
+  $("ehr2").innerHTML = [["Age / sex", `${p.age} / ${p.sex}`], ["Ejection fraction", p.ef + "%"], ["eGFR", p.egfr], ["NT-proBNP", p.ntprobnp + " pg/mL"], ["Sodium", p.sodium + " mmol/L"], ["Diabetes / HTN", `${p.diabetes ? "Yes" : "No"} / ${p.hypertension ? "Yes" : "No"}`], ["Furosemide", p.furosemide_mg + " mg"], ["Prior HF admissions", p.prior_admissions], ["Polygenic risk", p.hf_prs + "th pct"], ["EHR risk score", Math.round(p.ehr_risk * 100) + "%"]]
+    .map(([k, v]) => `<span>${k}</span><b style="font-family:var(--f-mono);color:var(--ink)">${v}</b>`).join("");
+  $("day-out").textContent = `Day ${d} of ${lastDay(p)}`;
+  const est = Math.max(t.est[d], 0);
+  $("k-fluid").textContent = est.toFixed(1) + " L";
+  $("k-trend").textContent = (t.trend[d] >= 0 ? "▲ +" : "▼ ") + t.trend[d].toFixed(2) + " L/day";
+  $("k-risk").textContent = Math.round(t.risk[d] * 100) + "%";
+  $("k-risk").style.color = t.risk[d] >= P.risk_threshold ? "var(--crit)" : "var(--ink)";
+  $("k-fid").textContent = t.fidelity[d] == null ? "Syncing" : Math.round(t.fidelity[d] * 100) + "%";
+  const ta = p.twin_alerts.filter(a => a <= d), ra = p.rule_alerts.filter(a => a <= d);
+  $("k-alert").textContent = ta.length ? "Day " + ta[0] : "None";
+  $("k-rule").textContent = "2 kg rule: " + (ra.length ? "day " + ra[0] : "none");
+  const [cls] = status(p, d), b = $("banner");
+  b.className = "banner " + cls;
+  if (d < P.calib_days) b.innerHTML = `Syncing <span>Learning this patient's own baselines (days 0–2).</span>`;
+  else if (t.risk[d] >= P.risk_threshold) b.innerHTML = `Alert <span>Fluid likely to reach 2 L within 5 days. Review and call the patient today.</span>`;
+  else if (t.ask[d]) b.innerHTML = `Weigh-in requested <span>The twin is unsure and the trend is rising; it has asked the family for a weight reading.</span>`;
+  else if (t.risk[d] >= 0.3) b.innerHTML = `Watch <span>Risk is rising but below the alert level.</span>`;
+  else b.innerHTML = `Stable <span>Recovery on track.</span>`;
+  drawMain(p, d); drawMinis(p, d); drawWhatIf(p, d); drawMsgs(p, d);
+}
+
+/* ---------- small SVG helpers ---------- */
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function lin(d0, d1, r0, r1) { return v => r0 + (v - d0) / (d1 - d0) * (r1 - r0); }
+function niceTicks(lo, hi, n) { const step = Math.pow(10, Math.floor(Math.log10((hi - lo) / n))); const err = (hi - lo) / n / step; const s = step * (err >= 5 ? 5 : err >= 2 ? 2 : 1); const out = []; for (let v = Math.ceil(lo / s) * s; v <= hi + 1e-9; v += s) out.push(+v.toFixed(6)); return out; }
+function pathOf(xs, ys, x, y) { let dstr = "", pen = false; xs.forEach((xv, i) => { const yv = ys[i]; if (yv == null) { pen = false; return; } dstr += (pen ? "L" : "M") + x(xv).toFixed(1) + "," + y(yv).toFixed(1); pen = true; }); return dstr; }
+
+function drawMain(p, d) {
+  const svg = $("main-chart"); svg.innerHTML = "";
+  const W = Math.min(900, Math.max(560, Math.round(svg.getBoundingClientRect().width) || 900)), H = 300;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const m = { l: 44, r: 16, t: 22, b: 30 };
+  const n = lastDay(p) + 1, days = [...Array(n).keys()];
+  const t = p.twin, lo = days.map(i => t.est[i] - 2 * t.sd[i]), hi = days.map(i => t.est[i] + 2 * t.sd[i]);
+  let ymax = Math.max(3.2, ...hi, ...(state.truth ? p.truth : [])), ymin = Math.min(-0.5, ...lo);
+  const x = lin(0, 29, m.l, W - m.r), y = lin(ymin, ymax, H - m.b, m.t);
+  niceTicks(ymin, ymax, 5).forEach(v => { el("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: css("--grid") }, svg); el("text", { x: m.l - 8, y: y(v) + 4, "text-anchor": "end", "font-size": 12, fill: css("--ink-3") }, svg).textContent = v; });
+  [0, 5, 10, 15, 20, 25, 29].forEach(v => { el("text", { x: x(v), y: H - 8, "text-anchor": "middle", "font-size": 12, fill: css("--ink-3") }, svg).textContent = v === 0 ? "day 0" : v; });
+  el("rect", { x: m.l, y: m.t, width: x(P.calib_days - 0.5) - m.l, height: H - m.b - m.t, fill: css("--grid") }, svg);
+  el("text", { x: m.l + 6, y: m.t + 14, "font-size": 11.5, fill: css("--ink-3") }, svg).textContent = "sync";
+  el("line", { x1: m.l, x2: W - m.r, y1: y(P.alert_level), y2: y(P.alert_level), stroke: css("--ink-3"), "stroke-dasharray": "5 5" }, svg);
+  el("text", { x: W - m.r, y: y(P.alert_level) - 6, "text-anchor": "end", "font-size": 11.5, fill: css("--ink-3") }, svg).textContent = "2 L warning level";
+  const shown = days.filter(i => i <= d);
+  let band = "M" + shown.map(i => x(i).toFixed(1) + "," + y(hi[i]).toFixed(1)).join("L") + "L" + shown.slice().reverse().map(i => x(i).toFixed(1) + "," + y(lo[i]).toFixed(1)).join("L") + "Z";
+  el("path", { d: band, fill: css("--twin-soft"), stroke: "none" }, svg);
+  if (state.truth) el("path", { d: pathOf(shown, shown.map(i => p.truth[i]), x, y), fill: "none", stroke: css("--truth"), "stroke-width": 2, "stroke-dasharray": "2 4" }, svg);
+  el("path", { d: pathOf(shown, shown.map(i => t.est[i]), x, y), fill: "none", stroke: css("--twin"), "stroke-width": 2.5, "stroke-linejoin": "round" }, svg);
+  const mark = (dd, color, label, row, dash) => { if (dd > d) return; el("line", { x1: x(dd), x2: x(dd), y1: m.t, y2: H - m.b, stroke: color, "stroke-width": 2, "stroke-dasharray": dash || "" }, svg); el("text", { x: x(dd) + 5, y: m.t + 12 + row * 14, "font-size": 11.5, "font-weight": 700, fill: color }, svg).textContent = label; };
+  p.rule_alerts.forEach(a => mark(a, css("--rule"), "2 kg rule", 1, "4 3"));
+  p.twin_alerts.forEach(a => mark(a, css("--crit"), "twin alert", 0));
+  if (p.hosp_day != null) mark(p.hosp_day, css("--ink"), p.hosp_cause === "heart_failure" ? "readmitted" : "readmitted (other cause)", 2);
+  el("circle", { cx: x(d), cy: y(t.est[d]), r: 5.5, fill: css("--twin"), stroke: css("--panel"), "stroke-width": 2 }, svg);
+  // hover layer
+  const cross = el("line", { y1: m.t, y2: H - m.b, stroke: css("--ink-3"), "stroke-width": 1, opacity: 0 }, svg);
+  const hit = el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "transparent" }, svg);
+  const tip = $("tip");
+  hit.addEventListener("mousemove", ev => {
+    const r = svg.getBoundingClientRect(), sx = (ev.clientX - r.left) / r.width * W;
+    const i = Math.max(0, Math.min(d, Math.round((sx - m.l) / (W - m.l - m.r) * 29)));
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("opacity", 1);
+    tip.hidden = false;
+    tip.innerHTML = `<b>Day ${i}</b><br>Fluid ${Math.max(t.est[i], 0).toFixed(2)} L ± ${(2 * t.sd[i]).toFixed(2)}<br>5-day risk ${Math.round(t.risk[i] * 100)}%` + (state.truth ? `<br>Hidden truth ${p.truth[i].toFixed(2)} L` : "");
+    tip.style.left = Math.min(ev.clientX + 14, innerWidth - 250) + "px"; tip.style.top = ev.clientY + 14 + "px";
+  });
+  hit.addEventListener("mouseleave", () => { cross.setAttribute("opacity", 0); tip.hidden = true; });
+}
+
+function drawMinis(p, d) {
+  const box = $("minis"); box.innerHTML = "";
+  SENS.forEach(([k, name, unit, fmt]) => {
+    const vals = p.obs[k], shown = vals.map((v, i) => i <= d ? v : null), present = vals.filter(v => v != null);
+    const last = [...shown].reverse().find(v => v != null);
+    const div = document.createElement("div"); div.className = "mini";
+    div.innerHTML = `<div class="t"><span>${name}</span><b>${last == null ? "–" : fmt(last) + " " + unit}</b></div>`;
+    const W = 260, H = 64, svg = el("svg", { viewBox: `0 0 ${W} ${H}`, class: "chart", role: "img", "aria-label": name });
+    let lo = Math.min(...present), hi = Math.max(...present); if (hi - lo < 1e-6) { hi += 1; lo -= 1; }
+    const pad = (hi - lo) * 0.1, x = lin(0, 29, 4, W - 4), y = lin(lo - pad, hi + pad, H - 4, 4);
+    el("line", { x1: 4, x2: W - 4, y1: H - 2, y2: H - 2, stroke: css("--grid") }, svg);
+    el("path", { d: pathOf([...vals.keys()], shown, x, y), fill: "none", stroke: css(k === "weight" ? "--rule" : "--ink-2"), "stroke-width": 1.8 }, svg);
+    shown.forEach((v, i) => { if (v != null) el("circle", { cx: x(i), cy: y(v), r: i === d ? 3.5 : 1.8, fill: css(k === "weight" ? "--rule" : "--ink-2") }, svg); });
+    p.twin_alerts.filter(a => a <= d).forEach(a => el("line", { x1: x(a), x2: x(a), y1: 2, y2: H - 2, stroke: css("--crit"), "stroke-width": 1.2, opacity: .7 }, svg));
+    div.appendChild(svg); box.appendChild(div);
+  });
+}
+
+function whatIf(c, tr, extra) { const out = [c]; for (let i = 0; i < 10; i++) { c = Math.max(c + tr - extra, 0); tr *= 0.9; out.push(c); } return out; }
+function drawWhatIf(p, d) {
+  const doses = [0, 0.2, 0.4, 0.6], seg = $("dose");
+  seg.innerHTML = "";
+  doses.forEach(v => { const b = document.createElement("button"); b.type = "button"; b.id = "dose-" + v; b.textContent = v === 0 ? "No change" : `Remove ${v} L/day`; b.setAttribute("aria-pressed", state.dose === v ? "true" : "false"); b.onclick = () => { state.dose = v; drawWhatIf(p, d); }; seg.appendChild(b); });
+  const svg = $("whatif"); svg.innerHTML = "";
+  const W = Math.max(440, Math.round(svg.getBoundingClientRect().width) || 520), H = 220;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const m = { l: 40, r: 14, t: 14, b: 28 };
+  const c0 = Math.max(p.twin.est[d], 0), tr = p.twin.trend[d];
+  const base = whatIf(c0, tr, 0), act = whatIf(c0, tr, state.dose);
+  const ymax = Math.max(3.5, ...base) * 1.05, x = lin(0, 10, m.l, W - m.r), y = lin(0, ymax, H - m.b, m.t);
+  niceTicks(0, ymax, 4).forEach(v => { el("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: css("--grid") }, svg); el("text", { x: m.l - 6, y: y(v) + 4, "text-anchor": "end", "font-size": 11.5, fill: css("--ink-3") }, svg).textContent = v; });
+  [0, 2, 4, 6, 8, 10].forEach(v => { el("text", { x: x(v), y: H - 8, "text-anchor": "middle", "font-size": 11.5, fill: css("--ink-3") }, svg).textContent = v === 0 ? "today" : "+" + v + "d"; });
+  el("line", { x1: m.l, x2: W - m.r, y1: y(P.hosp_threshold), y2: y(P.hosp_threshold), stroke: css("--crit"), "stroke-dasharray": "5 4" }, svg);
+  el("text", { x: W - m.r, y: y(P.hosp_threshold) - 6, "text-anchor": "end", "font-size": 11.5, fill: css("--crit") }, svg).textContent = "likely readmission";
+  const ks = [...Array(11).keys()];
+  el("path", { d: pathOf(ks, base, x, y), fill: "none", stroke: css("--ink-3"), "stroke-width": 2.2, "stroke-dasharray": "6 4" }, svg);
+  el("path", { d: pathOf(ks, act, x, y), fill: "none", stroke: css("--twin"), "stroke-width": 2.6 }, svg);
+  el("text", { x: x(10) - 2, y: y(base[10]) - 7, "text-anchor": "end", "font-size": 12, fill: css("--ink-2") }, svg).textContent = "no change";
+  if (state.dose > 0) el("text", { x: x(10) - 2, y: Math.min(y(act[10]) + 18, H - m.b - 4), "text-anchor": "end", "font-size": 12, "font-weight": 700, fill: css("--twin") }, svg).textContent = `with treatment change`;
+}
+
+function drawMsgs(p, d) {
+  const t = p.twin; let en, hi;
+  if (t.risk[d] >= P.risk_threshold) { en = "Papa's body is holding extra water. Please weigh him tomorrow morning and keep salt low. The doctor's team will call you today."; hi = "पापा के शरीर में पानी रुक रहा है। कल सुबह उनका वज़न लें और नमक कम रखें। डॉक्टर की टीम आज आपको फ़ोन करेगी।"; }
+  else if (t.ask[d]) { en = "Please weigh Papa tomorrow morning before breakfast."; hi = "कृपया कल सुबह नाश्ते से पहले पापा का वज़न लें।"; }
+  else { en = "Recovery is on track. Keep up the morning weigh-ins."; hi = "रिकवरी ठीक चल रही है। सुबह वज़न लेते रहें।"; }
+  if (p.sex === "F") { en = en.replace(/Papa's/g, "Mummy's").replace(/Papa/g, "Mummy").replace(/\bhim\b/g, "her"); hi = hi.replace(/पापा/g, "मम्मी"); }
+  $("msgs").innerHTML = `<div class="msg"><div class="lang">English</div>${en}</div><div class="msg" lang="hi"><div class="lang">हिन्दी</div>${hi}</div>`;
+}
+
+function renderCohort() {
+  const r = DATA.results, tw = r.results["HridAI twin"], rule = r.results["2 kg / 3 day weight rule"];
+  $("cohort-cap").textContent = `Untouched test cohort of ${r.cohort.patients} synthetic patients (${r.cohort.hf_readmissions} heart-failure readmissions). A readmission counts as caught if the alert came 2 to 14 days before it.`;
+  const tiles = [[Math.round(tw.sensitivity * 100) + "%", "caught by HridAI", "var(--twin)"], [Math.round(rule.sensitivity * 100) + "%", "caught by the 2 kg weight rule", "var(--rule)"], [tw.false_alerts_per_patient_month.toFixed(2), `false alerts per patient-month (rule ${rule.false_alerts_per_patient_month.toFixed(2)})`, "var(--ink)"], [tw.median_lead_days + " days", "median warning before readmission", "var(--ink)"]];
+  $("cohort").innerHTML = tiles.map(([v, l, c]) => `<div><div class="v" style="color:${c}">${v}</div><div class="s" style="color:var(--ink-2);font-size:13px">${l}</div></div>`).join("");
+}
+
+function stop() { if (state.timer) { clearInterval(state.timer); state.timer = null; $("play").textContent = "▶ Play"; } }
+$("play").onclick = () => {
+  if (state.timer) return stop();
+  const p = cur(); if (state.day >= lastDay(p)) state.day = 0;
+  $("play").textContent = "❚❚ Pause";
+  state.timer = setInterval(() => { state.day++; $("day").value = state.day; render(); if (state.day >= lastDay(cur())) stop(); }, 380);
+};
+$("day").oninput = e => { stop(); state.day = +e.target.value; render(); };
+$("truth").onchange = e => { state.truth = e.target.checked; render(); };
+document.querySelectorAll(".list .seg button").forEach(b => b.onclick = () => {
+  state.filter = b.dataset.f;
+  document.querySelectorAll(".list .seg button").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+  renderList();
+});
+let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(render, 150); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+renderCohort();
+// open on a patient with a clear early warning
+const demo = PTS.find(p => p.hosp_cause === "heart_failure" && p.twin_alerts.length && p.hosp_day >= 18 && p.twin_alerts[0] >= p.hosp_day - 9 && p.hosp_day - p.twin_alerts[0] >= 5 && !p.rule_alerts.some(a => a <= p.hosp_day - 2)) || PTS[0];
+select(demo.pid);
+</script>

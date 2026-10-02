@@ -21,12 +21,11 @@ Runs in any web browser, no install. The same dashboard ships in this repository
 | Healthcare use case | [Healthcare use case](#healthcare-use-case) |
 | Technical stack | [Technical stack](#technical-stack) |
 | AI/ML model or framework details | [AI/ML model](#aiml-model) |
-| Demo video (unlisted YouTube) | [Demo video](#demo-video) |
 | Open-source licence | [Licence](#open-source-licence) (MIT) |
 | Architecture diagram (PDF) | [docs/architecture.pdf](docs/architecture.pdf) |
 | Presentation (PDF/PPT) with project details and outcomes | [docs/presentation.pdf](docs/presentation.pdf) · [docs/presentation.pptx](docs/presentation.pptx) |
 | Live dashboard | [Open in browser](https://claude.ai/artifact/NUTA8SNFtbnV7SRMqw45AQ) · [dashboard/index.html](dashboard/index.html) |
-| All files and links publicly accessible | Yes. This repository is public, the video is unlisted (viewable by anyone with the link), and every document is inside the repository. |
+| All files and links publicly accessible | Yes. This repository is public and every document is inside the repository. |
 
 ## Team details
 
@@ -131,7 +130,7 @@ To keep the test honest, each synthetic patient's sensors respond differently fr
 ## Repository structure
 
 ```
-Octas_XLRI-Jamshedpur/
+Digital-Twin/
 ├── README.md                   this file (all submission items)
 ├── LICENSE                     MIT
 ├── requirements.txt
@@ -162,12 +161,6 @@ pytest                   # run the tests
 python dashboard/build_dashboard.py   # rebuild the browser dashboard
 streamlit run app.py     # open the Streamlit dashboard at http://localhost:8501
 ```
-
-## Demo video
-
-▶ **[Watch the demo video on YouTube](https://youtu.be/VIDEO_ID)**
-
-The video (about 20 minutes) walks through the problem, the model, a live dashboard demo and the results.
 
 ## Limitations
 

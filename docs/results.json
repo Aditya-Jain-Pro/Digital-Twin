@@ -1,0 +1,54 @@
+{
+  "cohort": {
+    "patients": 500,
+    "hf_readmissions": 89,
+    "other_readmissions": 29
+  },
+  "threshold": 0.6,
+  "results": {
+    "HridAI twin": {
+      "hf_readmissions": 89.0,
+      "sensitivity": 0.933,
+      "median_lead_days": 4.0,
+      "false_alerts_per_patient_month": 0.708
+    },
+    "2 kg / 3 day weight rule": {
+      "hf_readmissions": 89.0,
+      "sensitivity": 0.584,
+      "median_lead_days": 4.5,
+      "false_alerts_per_patient_month": 0.942
+    }
+  },
+  "ablation": {
+    "All sensors + EHR (HridAI)": {
+      "hf_readmissions": 89.0,
+      "sensitivity": 0.933,
+      "median_lead_days": 4.0,
+      "false_alerts_per_patient_month": 0.708
+    },
+    "All sensors, no EHR personalisation": {
+      "hf_readmissions": 89.0,
+      "sensitivity": 0.921,
+      "median_lead_days": 4.0,
+      "false_alerts_per_patient_month": 0.704
+    },
+    "Smartwatch only + EHR": {
+      "hf_readmissions": 89.0,
+      "sensitivity": 0.899,
+      "median_lead_days": 4.0,
+      "false_alerts_per_patient_month": 0.665
+    },
+    "Scale only + EHR": {
+      "hf_readmissions": 89.0,
+      "sensitivity": 0.787,
+      "median_lead_days": 4.0,
+      "false_alerts_per_patient_month": 0.898
+    }
+  },
+  "story_patient": {
+    "pid": 12,
+    "alert_day": 16,
+    "readmit_day": 23,
+    "rule_alerts": []
+  }
+}
